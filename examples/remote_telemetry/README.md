@@ -13,7 +13,7 @@ This example targets ESP32-based boards with WiFi (for example the Seeed XIAO ES
 Select an ESP32 WiFi environment such as `env:Xiao_S3_WIO_remote_telemetry` or `env:Tbeam_SX1276_remote_telemetry` from PlatformIO, or run:
 
 ```
-pio run -e Xiao_S3_WIO_remote_telemetry
+pio platformio 
 ```
 
 or
@@ -21,6 +21,16 @@ or
 ```
 pio run -e Tbeam_SX1276_remote_telemetry
 ```
+
+### CayenneLPP library patch
+
+PlatformIO downloads electroniccats/CayenneLPP 1.6.1 per environment; the ArduinoJson 6.21 API no longer accepts the `root.add<JsonObject>()` call used in that release. After the first dependency install (or any time the PlatformIO cache refreshes) edit the cached source:
+
+1. Open the CayenneLPP copy inside your environment's libdeps folder and locate the decoder assignment (for reference, the Xiao cache lives at [.pio/libdeps/Xiao_S3_WIO_remote_telemetry/CayenneLPP/src/CayenneLPP.cpp](.pio/libdeps/Xiao_S3_WIO_remote_telemetry/CayenneLPP/src/CayenneLPP.cpp#L969-L976)).
+2. Replace the line `JsonObject data = root.add<JsonObject>();` with `JsonObject data = root.createNestedObject();` so the build succeeds with ArduinoJson 6.21.x.
+3. Repeat the change for every ESP32 telemetry environment you compile.
+
+> Tip: if `.pio/libdeps` is deleted or `pio pkg update` runs, reapply the patch before the next build.
 
 ## Logging
 
