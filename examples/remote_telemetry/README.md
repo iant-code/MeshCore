@@ -50,6 +50,8 @@ Send JSON payloads to the MQTT control topic (`settings.mqttControlTopic`). Key 
 {"command": "list_repeaters"}
 ```
 
+The control topic also accepts a two-hex suffix on these commands to carry the first byte of a target repeater ID (e.g., `list_repeaters8f`, `add_repeater8f`, `update_repeater8f`). The suffix is optional and currently used only for routing/compatibility; payloads remain the same.
+
 ```json
 {
   "command": "add_repeater",

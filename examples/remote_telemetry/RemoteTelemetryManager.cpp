@@ -1062,7 +1062,20 @@ void RemoteTelemetryManager::handleConfigCommand(const char* command, JsonDocume
 
   String detail;
   auto equals = [&](const char* value) -> bool {
-    return value && strcmp(command, value) == 0;
+    if (!value) return false;
+    size_t baseLen = strlen(value);
+    size_t cmdLen = strlen(command);
+    if (cmdLen == baseLen) {
+      return strcmp(command, value) == 0;
+    }
+
+    // Allow optional two-hex suffix carrying the first byte of a target repeater (e.g., list_repeaters8f)
+    if (cmdLen == baseLen + 2 && strncmp(command, value, baseLen) == 0) {
+      char h1 = command[cmdLen - 2];
+      char h2 = command[cmdLen - 1];
+      return mesh::Utils::isHexChar(h1) && mesh::Utils::isHexChar(h2);
+    }
+    return false;
   };
 
   if (equals("list_repeaters") || equals("get_repeaters") || equals("query_repeaters") || equals("get_config")) {
