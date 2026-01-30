@@ -1,6 +1,6 @@
 # Remote Telemetry Node
 
-This example targets ESP32-based boards with WiFi (for example the Seeed XIAO ESP32S3 WIO and LilyGO T-Beam SX1276) and turns the device into a WiFi-enabled telemetry forwarder. The firmware logs in to configured repeaters, fetches telemetry data and republishes it to an MQTT broker.
+This example targets ESP32-based boards with WiFi (for example the Seeed XIAO ESP32S3 WIO, Heltec LoRa32 V3, and LilyGO T-Beam SX1276) and turns the device into a WiFi-enabled telemetry forwarder. The firmware logs in to configured repeaters, fetches telemetry data and republishes it to an MQTT broker.
 
 ## Configuration
 
@@ -10,17 +10,25 @@ This example targets ESP32-based boards with WiFi (for example the Seeed XIAO ES
 
 ## Building
 
-Select an ESP32 WiFi environment such as `env:Xiao_S3_WIO_remote_telemetry` or `env:Tbeam_SX1276_remote_telemetry` from PlatformIO, or run:
+Select an ESP32 WiFi environment such as `env:Xiao_S3_WIO_remote_telemetry`, `env:Heltec_v3_remote_telemetry`, or `env:Tbeam_SX1276_remote_telemetry` from PlatformIO, or run:
 
 ```
-pio run -e Xiao_S3_WIO_remote_telemetry
+platformio run -e Xiao_S3_WIO_remote_telemetry
 ```
 
 or
 
 ```
-pio run -e Tbeam_SX1276_remote_telemetry
+platformio run -e Tbeam_SX1276_remote_telemetry
 ```
+
+or
+
+```
+platformio run -e Heltec_v3_remote_telemetry -t mergebin
+```
+
+If `.pio/libdeps` is cleaned, reapply the CayenneLPP ArduinoJson patch as noted in the build logs (switch `add<JsonObject>()` to `createNestedObject()` in CayenneLPP.cpp) and ensure `densaugeo/base64` and `ArduinoJson` stay in `lib_deps`.
 
 ## Logging
 
