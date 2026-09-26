@@ -77,6 +77,14 @@ Send JSON payloads to the MQTT control topic (`settings.mqttControlTopic`). Key 
 }
 ```
 
+#### Reboot
+
+```json
+{"command": "reboot"}
+```
+
+> Acknowledged with a `rebooting` status event, then the node calls `esp_restart()` immediately. `restart` is accepted as an alias.
+
 #### Runtime tuning
 
 ```json

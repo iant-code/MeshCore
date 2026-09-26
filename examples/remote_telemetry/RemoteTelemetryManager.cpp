@@ -1070,6 +1070,14 @@ void RemoteTelemetryManager::handleConfigCommand(const char* command, JsonDocume
     return value && strcmp(command, value) == 0;
   };
 
+  if (equals("reboot") || equals("restart")) {
+    publishStatusPayload("rebooting", "control_command");
+    RT_INFO_PRINTLN("Reboot requested via MQTT control command");
+    _mqtt.loop();
+    delay(500);
+    esp_restart();
+  }
+
   if (equals("list_repeaters") || equals("get_repeaters") || equals("query_repeaters") || equals("get_config")) {
     if (publishRepeatersSnapshot("repeaters_snapshot", "config_sent")) {
       publishStatusPayload("control_ack", "repeaters_snapshot_sent");
