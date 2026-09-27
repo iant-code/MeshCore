@@ -36,6 +36,9 @@ struct Settings {
 
 bool decodeHexKey(const char* hex, std::array<uint8_t, PUB_KEY_SIZE>& out);
 String encodeHexKey(const std::array<uint8_t, PUB_KEY_SIZE>& key);
+// Decodes a hex string of any even length up to PUB_KEY_SIZE*2 chars (e.g. a
+// pubKey prefix). Returns the number of bytes decoded, or -1 on invalid input.
+int decodeHexPrefix(const char* hex, uint8_t* out, size_t maxBytes);
 bool parseRepeatersJson(const char* json, std::vector<RepeaterConfig>& out, String& error);
 String repeatersToJson(const std::vector<RepeaterConfig>& repeaters);
 

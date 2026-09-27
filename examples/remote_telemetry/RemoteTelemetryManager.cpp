@@ -1087,6 +1087,24 @@ void RemoteTelemetryManager::handleConfigCommand(const char* command, JsonDocume
     return;
   }
 
+  if (equals("get_repeater") || equals("query_repeater") || equals("find_repeater")) {
+    const char* prefixHex = doc["pubKey"].as<const char*>();
+    if (!prefixHex || prefixHex[0] == '\0') {
+      publishStatusPayload("control_error", "pubKey_required");
+      return;
+    }
+
+    uint8_t prefix[PUB_KEY_SIZE];
+    int prefixLen = telemetry::decodeHexPrefix(prefixHex, prefix, PUB_KEY_SIZE);
+    if (prefixLen <= 0) {
+      publishStatusPayload("control_error", "pubKey_invalid");
+      return;
+    }
+
+    publishRepeaterMatches(prefix, static_cast<size_t>(prefixLen), prefixHex);
+    return;
+  }
+
   if (!_configStore) {
     publishStatusPayload("control_error", "config_store_missing");
     return;
@@ -1392,8 +1410,10 @@ bool RemoteTelemetryManager::publishRepeatersSnapshot(const char* event, const c
   for (const auto& cfg : _settings->repeaters) {
     JsonObject repeater = arr.createNestedObject();
     repeater["name"] = cfg.name;
-    repeater["password"] = cfg.password;
-    repeater["pubKey"] = telemetry::encodeHexKey(cfg.pubKey);
+    char shortId[5];
+    mesh::Utils::toHex(shortId, cfg.pubKey.data(), 2);
+    shortId[4] = '\0';
+    repeater["pubKey"] = shortId;
   }
 
   char pubKeyHex[PUB_KEY_SIZE * 2 + 1];
@@ -1412,6 +1432,52 @@ bool RemoteTelemetryManager::publishRepeatersSnapshot(const char* event, const c
     RT_INFO_PRINTLN("Failed to publish repeaters snapshot");
   }
   return ok;
+}
+
+void RemoteTelemetryManager::publishRepeaterMatches(const uint8_t* prefix, size_t prefixLen, const char* queryHex) {
+  if (!_mqtt.connected() || !_settings || _settings->mqttStatusTopic.length() == 0) {
+    return;
+  }
+
+  StaticJsonDocument<1024> doc;
+  doc["event"] = "repeater_detail";
+  doc["query"] = queryHex;
+
+  JsonArray arr = doc.createNestedArray("repeaters");
+  size_t matches = 0;
+  for (const auto& cfg : _settings->repeaters) {
+    if (memcmp(cfg.pubKey.data(), prefix, prefixLen) == 0) {
+      JsonObject repeater = arr.createNestedObject();
+      repeater["name"] = cfg.name;
+      repeater["password"] = cfg.password;
+      repeater["pubKey"] = telemetry::encodeHexKey(cfg.pubKey);
+      matches++;
+    }
+  }
+  doc["matches"] = matches;
+
+  char nodePubKeyHex[PUB_KEY_SIZE * 2 + 1];
+  mesh::Utils::toHex(nodePubKeyHex, _mesh.self_id.pub_key, PUB_KEY_SIZE);
+  JsonObject node = doc.createNestedObject("node");
+  node["pubKey"] = nodePubKeyHex;
+
+  if (matches == 0) {
+    publishStatusPayload("control_error", "repeater_not_found");
+    return;
+  }
+
+  char buffer[1024];
+  size_t written = serializeJson(doc, buffer, sizeof(buffer));
+  if (written == 0 || written >= sizeof(buffer)) {
+    RT_INFO_PRINTLN("Failed to serialise repeater detail response");
+    publishStatusPayload("control_error", "repeater_detail_failed");
+    return;
+  }
+
+  if (!_mqtt.publish(_settings->mqttStatusTopic.c_str(), buffer, written)) {
+    RT_INFO_PRINTLN("Failed to publish repeater detail response");
+    publishStatusPayload("control_error", "repeater_detail_failed");
+  }
 }
 
 bool RemoteTelemetryManager::publishStatusPayload(const char* event, const char* detail) {

@@ -91,6 +91,26 @@ bool decodeHexKey(const char* hex, std::array<uint8_t, PUB_KEY_SIZE>& out) {
   return true;
 }
 
+int decodeHexPrefix(const char* hex, uint8_t* out, size_t maxBytes) {
+  if (!hex || !out) {
+    return -1;
+  }
+  size_t len = strlen(hex);
+  if (len == 0 || (len % 2) != 0 || len > maxBytes * 2) {
+    return -1;
+  }
+  size_t numBytes = len / 2;
+  for (size_t i = 0; i < numBytes; ++i) {
+    int hi = hexNibble(hex[i * 2]);
+    int lo = hexNibble(hex[i * 2 + 1]);
+    if (hi < 0 || lo < 0) {
+      return -1;
+    }
+    out[i] = static_cast<uint8_t>((hi << 4) | lo);
+  }
+  return static_cast<int>(numBytes);
+}
+
 String encodeHexKey(const std::array<uint8_t, PUB_KEY_SIZE>& key) {
   static const char HEX_DIGITS[] = "0123456789abcdef";
   String encoded;

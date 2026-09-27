@@ -116,6 +116,7 @@ private:
   int findConfigIndexByKey(const std::array<uint8_t, PUB_KEY_SIZE>& key) const;
   bool persistSettings(const char* context);
   bool publishRepeatersSnapshot(const char* event, const char* detail);
+  void publishRepeaterMatches(const uint8_t* prefix, size_t prefixLen, const char* queryHex);
   bool publishStatusPayload(const char* event, const char* detail = nullptr);
   void publishStatusEvent(const char* event, bool markBoot);
   static void mqttCallback(char* topic, uint8_t* payload, unsigned int length);

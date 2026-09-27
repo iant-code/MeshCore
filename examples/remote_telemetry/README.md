@@ -48,6 +48,14 @@ Send JSON payloads to the MQTT control topic (`settings.mqttControlTopic`). Key 
 {"command": "list_repeaters"}
 ```
 
+> The `repeaters_snapshot` response trims each entry down to `name` and a 2-byte `pubKey` prefix (4 hex chars) to keep the message within the MQTT client's packet size limit. Use `get_repeater` below to resolve a prefix to its full record.
+
+```json
+{"command": "get_repeater", "pubKey": "364c"}
+```
+
+> Looks up repeaters whose `pubKey` starts with the given hex prefix (2 to 64 characters, i.e. 1 to 32 bytes). Responds on the status topic with the full `pubKey`, `name`, and `password` for every match — this is a targeted, small response, so unlike `repeaters_snapshot` it isn't trimmed. If two configured repeaters happen to share the same prefix, both are returned; use more hex digits to narrow it down further.
+
 ```json
 {
   "command": "add_repeater",
@@ -135,6 +143,26 @@ Status messages land on `settings.mqttStatusTopic`, for example:
   "uptimeMs": 54012
 }
 ```
+
+```json
+{
+  "event": "repeater_detail",
+  "query": "364c",
+  "matches": 1,
+  "repeaters": [
+    {
+      "name": "IT-Orp-S omni",
+      "password": "",
+      "pubKey": "8f3e2e611bf8469deed5ece8a59249281bca7e891febdd58861a406fbf73a8bc"
+    }
+  ],
+  "node": {
+    "pubKey": "8f3e2e611bf8469deed5ece8a59249281bca7e891febdd58861a406fbf73a8bc"
+  }
+}
+```
+
+> `get_repeater` responses include the full `password`, unlike `repeaters_snapshot`. Only send this on a private, trusted broker/network.
 
 ### Telemetry Payloads
 
