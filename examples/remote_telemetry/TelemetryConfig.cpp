@@ -51,6 +51,7 @@ void Settings::applyDefaults() {
   pollIntervalMs = 30UL * 60UL * 1000UL;
   loginRetryMs = 120000UL;
   timeoutRetryMs = 30000UL;
+  guestLoginFirst = true;
   firmwareLastModified = "";
   repeaters.clear();
 }
@@ -260,6 +261,10 @@ bool ConfigStore::load() {
     loaded.firmwareLastModified = firmwareLastModified;
   }
 
+  if (doc.containsKey("guestLoginFirst")) {
+    loaded.guestLoginFirst = doc["guestLoginFirst"].as<bool>();
+  }
+
   if (JsonArray repeaters = doc["repeaters"].as<JsonArray>()) {
     loaded.repeaters.clear();
     for (JsonObject obj : repeaters) {
@@ -304,6 +309,7 @@ bool ConfigStore::save() const {
   intervals["timeoutRetryMs"] = _settings.timeoutRetryMs;
 
   doc["firmwareLastModified"] = _settings.firmwareLastModified;
+  doc["guestLoginFirst"] = _settings.guestLoginFirst;
 
   JsonArray repeaters = doc.createNestedArray("repeaters");
   for (const auto& repeater : _settings.repeaters) {

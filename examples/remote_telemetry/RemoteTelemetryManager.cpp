@@ -151,7 +151,7 @@ void RemoteTelemetryManager::handleLoginResponse(const ContactInfo& contact, con
 
   LoginMode mode = state.pendingLoginMode;
   state.pendingLoginMode = LoginMode::None;
-  const char* modeLabel = (mode == LoginMode::Admin) ? "Admin" : "Guest";
+  const char* modeLabel = (mode == LoginMode::Admin) ? "Admin" : (mode == LoginMode::Direct) ? "Direct" : "Guest";
 
   if (state.lastLoginRequestSent != 0) {
     unsigned long rtt = millis() - state.lastLoginRequestSent;
@@ -173,13 +173,13 @@ void RemoteTelemetryManager::handleLoginResponse(const ContactInfo& contact, con
 
   unsigned long now = millis();
 
-  if (mode == LoginMode::Admin) {
+  if (mode == LoginMode::Admin || mode == LoginMode::Direct) {
     state.guestRouteEstablished = true;
     state.loggedIn = true;
     state.lastLoginSuccess = now;
     scheduleLogin(state, _pollIntervalMs);
     state.nextTelemetryPoll = now;
-    RT_INFO_PRINTLN("Admin login succeeded for %s", cfg.name.c_str());
+    RT_INFO_PRINTLN("%s login succeeded for %s", modeLabel, cfg.name.c_str());
     return;
   }
 
@@ -261,7 +261,7 @@ void RemoteTelemetryManager::notifySendTimeout() {
     if (state.loginPending && now > state.loginDeadline) {
       LoginMode mode = state.pendingLoginMode;
       state.pendingLoginMode = LoginMode::None;
-      const char* modeLabel = (mode == LoginMode::Admin) ? "Admin" : "Guest";
+      const char* modeLabel = (mode == LoginMode::Admin) ? "Admin" : (mode == LoginMode::Direct) ? "Direct" : "Guest";
       RT_INFO_PRINTLN("%s login request timed out for %s", modeLabel, cfg.name.c_str());
       state.loginPending = false;
       state.loggedIn = false;
@@ -508,7 +508,7 @@ void RemoteTelemetryManager::processRepeaters() {
     if (state.loginPending && now > state.loginDeadline) {
       LoginMode mode = state.pendingLoginMode;
       state.pendingLoginMode = LoginMode::None;
-      const char* modeLabel = (mode == LoginMode::Admin) ? "Admin" : "Guest";
+      const char* modeLabel = (mode == LoginMode::Admin) ? "Admin" : (mode == LoginMode::Direct) ? "Direct" : "Guest";
       RT_INFO_PRINTLN("%s login timed out for %s", modeLabel, cfg.name.c_str());
       state.loginPending = false;
       state.loggedIn = false;
@@ -579,7 +579,14 @@ void RemoteTelemetryManager::processRepeaters() {
     LoginMode nextMode = LoginMode::None;
     bool adminPasswordPresent = cfg.password.length() > 0;
 
-    if (!state.guestRouteEstablished) {
+    if (_settings && !_settings->guestLoginFirst) {
+      // Single-attempt mode: send whatever password is configured (or blank for
+      // guest-only repeaters) on the very first try, skipping the blank-password
+      // route-discovery probe. See README "Runtime tuning" for guestLoginFirst.
+      if (!state.loggedIn) {
+        nextMode = LoginMode::Direct;
+      }
+    } else if (!state.guestRouteEstablished) {
       nextMode = LoginMode::Guest;
     } else if (adminPasswordPresent && !state.loggedIn) {
       if (state.contact->out_path_len < 0) {
@@ -595,7 +602,7 @@ void RemoteTelemetryManager::processRepeaters() {
       continue;
     }
 
-    const char* password = (nextMode == LoginMode::Admin) ? cfg.password.c_str() : "";
+    const char* password = (nextMode == LoginMode::Admin || nextMode == LoginMode::Direct) ? cfg.password.c_str() : "";
 
     uint32_t est;
     int result = _mesh.sendLogin(*state.contact, password, est);
@@ -609,7 +616,7 @@ void RemoteTelemetryManager::processRepeaters() {
       state.lastLoginRequestSent = now;
       state.pendingLoginMode = nextMode;
       markRequestStarted(PendingRequestType::Login, i);
-      const char* modeLabel = (nextMode == LoginMode::Admin) ? "admin" : "guest";
+      const char* modeLabel = (nextMode == LoginMode::Admin) ? "admin" : (nextMode == LoginMode::Direct) ? "direct" : "guest";
       RT_DEBUG_PRINTLN("%s login send est=%lu ms deadline=%lu ms for %s", modeLabel, static_cast<unsigned long>(est), static_cast<unsigned long>(state.loginDeadline - now), cfg.name.c_str());
       RT_INFO_PRINTLN("%s login sent to %s (%s)", modeLabel, cfg.name.c_str(), result == MSG_SEND_SENT_DIRECT ? "direct" : "flood");
     }
@@ -930,6 +937,7 @@ void RemoteTelemetryManager::handleControlMessage(const uint8_t* payload, size_t
   bool timeoutUpdated = false;
   bool loginUpdated = false;
   bool topicUpdated = false;
+  bool guestLoginFirstUpdated = false;
 
   if (doc.containsKey("pollIntervalMs")) {
     unsigned long requested = doc["pollIntervalMs"].as<unsigned long>();
@@ -1004,6 +1012,21 @@ void RemoteTelemetryManager::handleControlMessage(const uint8_t* payload, size_t
     RT_INFO_PRINTLN("Login retry interval updated to %lu ms", _loginRetryMs);
   }
 
+  if (doc.containsKey("guestLoginFirst")) {
+    bool requested = doc["guestLoginFirst"].as<bool>();
+    if (_settings && requested != _settings->guestLoginFirst) {
+      _settings->guestLoginFirst = requested;
+      if (persistSettings("guest_login_first_update")) {
+        guestLoginFirstUpdated = true;
+        RT_INFO_PRINTLN("guestLoginFirst updated to %s", requested ? "true" : "false");
+      } else {
+        _settings->guestLoginFirst = !requested;
+        publishStatusPayload("control_error", "config_save_failed");
+        return;
+      }
+    }
+  }
+
   const char* topicKey = nullptr;
   if (doc.containsKey("telemetryTopic")) {
     topicKey = doc["telemetryTopic"].as<const char*>();
@@ -1039,8 +1062,8 @@ void RemoteTelemetryManager::handleControlMessage(const uint8_t* payload, size_t
     }
   }
 
-  if (intervalUpdated || timeoutUpdated || loginUpdated || topicUpdated) {
-    if (loginUpdated) {
+  if (intervalUpdated || timeoutUpdated || loginUpdated || topicUpdated || guestLoginFirstUpdated) {
+    if (loginUpdated || guestLoginFirstUpdated) {
       unsigned long now = millis();
       for (size_t i = 0; i < _repeaterCount; i++) {
         auto& state = _repeaters[i];
@@ -1059,7 +1082,7 @@ void RemoteTelemetryManager::handleControlMessage(const uint8_t* payload, size_t
     publishStatusPayload("telemetry_topic_updated", _settings->mqttTelemetryTopic.c_str());
   }
 
-  if (!(intervalUpdated || timeoutUpdated || loginUpdated || topicUpdated)) {
+  if (!(intervalUpdated || timeoutUpdated || loginUpdated || topicUpdated || guestLoginFirstUpdated)) {
     publishStatusEvent("control_ack", false);
   }
 }

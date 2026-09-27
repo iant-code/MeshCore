@@ -43,6 +43,7 @@ private:
     None,
     Guest,
     Admin,
+    Direct,  // used when Settings::guestLoginFirst is false: send the configured password on the first attempt
   };
 
   struct RepeaterState {

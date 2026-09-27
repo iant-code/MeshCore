@@ -139,6 +139,12 @@ Send JSON payloads to the MQTT control topic (`settings.mqttControlTopic`). Key 
 
 > The telemetry topic update takes effect immediately and is persisted to `/telemetry.json`. The `mqttTelemetryTopic` key is accepted as an alias.
 
+```json
+{"guestLoginFirst": false}
+```
+
+> Controls the repeater login sequence. `true` (the default) is the original behavior: probe with a blank password first to discover the return route, then escalate to the configured password once that route is known. `false` sends the configured password (or blank, if none is set) on the very first attempt, skipping the blank-password probe entirely — this also resolves the return route, since the repeater attaches it to the reply of any successful flood request, login included. Persisted to `/telemetry.json`; takes effect on each repeater's next login attempt.
+
 ### Responses from the Node
 
 Status messages land on `settings.mqttStatusTopic`, for example:
