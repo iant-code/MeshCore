@@ -2,6 +2,9 @@
 
 #include <ArduinoJson.h>
 #include <esp_system.h>
+#include <HTTPClient.h>
+#include <HTTPUpdate.h>
+#include <WiFiClientSecure.h>
 
 #include <algorithm>
 #include <cmath>
@@ -12,6 +15,8 @@
 #include <helpers/AdvertDataHelpers.h>
 #include <helpers/TxtDataHelpers.h>
 #include <helpers/sensors/LPPDataHelpers.h>
+
+#include "credentials.h"
 
 #if REMOTE_TELEMETRY_DEBUG
 #define RT_DEBUG_PRINTF(F, ...) Serial.printf("[telemetry] " F, ##__VA_ARGS__)
@@ -1078,6 +1083,11 @@ void RemoteTelemetryManager::handleConfigCommand(const char* command, JsonDocume
     esp_restart();
   }
 
+  if (equals("update_firmware")) {
+    handleFirmwareUpdateCommand();
+    return;
+  }
+
   if (equals("list_repeaters") || equals("get_repeaters") || equals("query_repeaters") || equals("get_config")) {
     if (publishRepeatersSnapshot("repeaters_snapshot", "config_sent")) {
       publishStatusPayload("control_ack", "repeaters_snapshot_sent");
@@ -1477,6 +1487,108 @@ void RemoteTelemetryManager::publishRepeaterMatches(const uint8_t* prefix, size_
   if (!_mqtt.publish(_settings->mqttStatusTopic.c_str(), buffer, written)) {
     RT_INFO_PRINTLN("Failed to publish repeater detail response");
     publishStatusPayload("control_error", "repeater_detail_failed");
+  }
+}
+
+void RemoteTelemetryManager::publishFirmwareCheckResult(const char* decision, const char* reason, const String& currentVersion, const String& remoteVersion) {
+  if (!_mqtt.connected() || !_settings || _settings->mqttStatusTopic.length() == 0) {
+    return;
+  }
+
+  StaticJsonDocument<512> doc;
+  doc["event"] = "firmware_update_check";
+  doc["decision"] = decision;
+  doc["reason"] = reason;
+  doc["currentVersion"] = currentVersion;
+  doc["remoteVersion"] = remoteVersion;
+  doc["uptimeMs"] = millis();
+
+  char pubKeyHex[PUB_KEY_SIZE * 2 + 1];
+  mesh::Utils::toHex(pubKeyHex, _mesh.self_id.pub_key, PUB_KEY_SIZE);
+  JsonObject node = doc.createNestedObject("node");
+  node["pubKey"] = pubKeyHex;
+
+  char buffer[512];
+  size_t written = serializeJson(doc, buffer, sizeof(buffer));
+  if (written == 0 || written >= sizeof(buffer)) {
+    RT_INFO_PRINTLN("Failed to serialise firmware update check result");
+    return;
+  }
+
+  if (!_mqtt.publish(_settings->mqttStatusTopic.c_str(), buffer, written)) {
+    RT_INFO_PRINTLN("Failed to publish firmware update check result");
+  }
+}
+
+void RemoteTelemetryManager::handleFirmwareUpdateCommand() {
+  if (!_settings) {
+    publishStatusPayload("control_error", "settings_unavailable");
+    return;
+  }
+
+  const char* url = remote_telemetry::defaults::FIRMWARE_UPDATE_URL;
+  if (!url || url[0] == '\0') {
+    publishFirmwareCheckResult("error", "url_not_configured", _settings->firmwareLastModified, "");
+    return;
+  }
+
+  HTTPClient http;
+  http.begin(url);
+  const char* headerKeys[] = {"Last-Modified"};
+  http.collectHeaders(headerKeys, 1);
+
+  int httpCode = http.sendRequest("HEAD");
+  if (httpCode <= 0 || httpCode >= 300) {
+    RT_INFO_PRINTLN("Firmware check HEAD request failed, code=%d", httpCode);
+    http.end();
+    publishFirmwareCheckResult("error", "check_failed", _settings->firmwareLastModified, "");
+    return;
+  }
+
+  String remoteVersion = http.header("Last-Modified");
+  http.end();
+
+  if (remoteVersion.length() == 0) {
+    RT_INFO_PRINTLN("Firmware check response missing Last-Modified header");
+    publishFirmwareCheckResult("error", "check_failed", _settings->firmwareLastModified, "");
+    return;
+  }
+
+  String currentVersion = _settings->firmwareLastModified;
+  if (currentVersion.length() > 0 && currentVersion == remoteVersion) {
+    publishFirmwareCheckResult("declined", "unchanged", currentVersion, remoteVersion);
+    return;
+  }
+
+  const char* reason = currentVersion.length() == 0 ? "first_check" : "changed";
+  publishFirmwareCheckResult("accepted", reason, currentVersion, remoteVersion);
+  RT_INFO_PRINTLN("Firmware update accepted (%s), downloading from %s", reason, url);
+
+  WiFiClientSecure updateClient;
+  updateClient.setInsecure();
+  httpUpdate.rebootOnUpdate(false);
+  t_httpUpdate_return result = httpUpdate.update(updateClient, url);
+
+  switch (result) {
+    case HTTP_UPDATE_OK: {
+      _settings->firmwareLastModified = remoteVersion;
+      persistSettings("firmware_update");
+      publishStatusPayload("firmware_update_installed", remoteVersion.c_str());
+      RT_INFO_PRINTLN("Firmware update installed, rebooting");
+      _mqtt.loop();
+      delay(500);
+      esp_restart();
+      break;
+    }
+    case HTTP_UPDATE_NO_UPDATES:
+      RT_INFO_PRINTLN("Firmware update reported no updates available");
+      publishStatusPayload("firmware_update_failed", "no_updates_reported");
+      break;
+    case HTTP_UPDATE_FAILED:
+    default:
+      RT_INFO_PRINTLN("Firmware update failed: %s", httpUpdate.getLastErrorString().c_str());
+      publishStatusPayload("firmware_update_failed", httpUpdate.getLastErrorString().c_str());
+      break;
   }
 }
 

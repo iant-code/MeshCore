@@ -28,6 +28,7 @@ struct Settings {
   unsigned long pollIntervalMs;
   unsigned long loginRetryMs;
   unsigned long timeoutRetryMs;
+  String firmwareLastModified;
   std::vector<RepeaterConfig> repeaters;
 
   void applyDefaults();

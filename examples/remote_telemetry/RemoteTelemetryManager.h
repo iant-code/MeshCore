@@ -117,6 +117,8 @@ private:
   bool persistSettings(const char* context);
   bool publishRepeatersSnapshot(const char* event, const char* detail);
   void publishRepeaterMatches(const uint8_t* prefix, size_t prefixLen, const char* queryHex);
+  void handleFirmwareUpdateCommand();
+  void publishFirmwareCheckResult(const char* decision, const char* reason, const String& currentVersion, const String& remoteVersion);
   bool publishStatusPayload(const char* event, const char* detail = nullptr);
   void publishStatusEvent(const char* event, bool markBoot);
   static void mqttCallback(char* topic, uint8_t* payload, unsigned int length);
