@@ -29,7 +29,7 @@ or
 platformio run -e Heltec_v3_remote_telemetry -t mergebin
 ```
 
-If `.pio/libdeps` is cleaned, reapply the CayenneLPP ArduinoJson patch as noted in the build logs (switch `add<JsonObject>()` to `createNestedObject()` in CayenneLPP.cpp) and ensure `densaugeo/base64` and `ArduinoJson` stay in `lib_deps`.
+These environments pin `bblanchon/ArduinoJson @ 7.4.2`, which matches the API used by CayenneLPP 1.6.1, so no patching of `.pio/libdeps` is needed. Keep `densaugeo/base64` and `ArduinoJson` in `lib_deps`.
 
 ## Logging
 

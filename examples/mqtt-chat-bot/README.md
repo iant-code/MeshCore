@@ -16,7 +16,7 @@ pio run -e Tbeam_SX1276_mqtt_chat_bot
 pio run -e Xiao_S3_WIO_mqtt_chat_bot
 ```
 
-> **Note:** PlatformIO caches third-party libraries per environment. After the first build, open the generated CayenneLPP sources at [.pio/libdeps/Tbeam_SX1276_mqtt_chat_bot/CayenneLPP/src/CayenneLPP.cpp](.pio/libdeps/Tbeam_SX1276_mqtt_chat_bot/CayenneLPP/src/CayenneLPP.cpp#L972) and [.pio/libdeps/Xiao_S3_WIO_mqtt_chat_bot/CayenneLPP/src/CayenneLPP.cpp](.pio/libdeps/Xiao_S3_WIO_mqtt_chat_bot/CayenneLPP/src/CayenneLPP.cpp#L972) and replace `root.add<JsonObject>()` with `root.createNestedObject()`. This adapts the vendor library to ArduinoJson 6.21.x and must be re-applied whenever PlatformIO refreshes the cache.
+> **Note:** These environments pin `bblanchon/ArduinoJson @ 7.4.2`, which matches the API used by CayenneLPP 1.6.1, so no patching of `.pio/libdeps` is needed. Keep `densaugeo/base64` and `ArduinoJson` in `lib_deps`.
 
 Upload with `pio run -t upload -e <environment>` or use the VS Code PlatformIO UI.
 

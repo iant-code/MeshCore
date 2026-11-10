@@ -88,6 +88,7 @@ protected:
   void onContactPathUpdated(const ContactInfo& /*contact*/) override {}
   void onMessageRecv(const ContactInfo& /*contact*/, mesh::Packet* /*pkt*/, uint32_t /*sender_timestamp*/, const char* /*text*/) override {}
   void onCommandDataRecv(const ContactInfo& /*contact*/, mesh::Packet* /*pkt*/, uint32_t /*sender_timestamp*/, const char* /*text*/) override {}
+  void onCLICommandRecv(const ContactInfo& /*contact*/, mesh::Packet* /*pkt*/, uint32_t /*sender_timestamp*/, const char* /*text*/, char* /*reply*/) override {}
   void onSignedMessageRecv(const ContactInfo& /*contact*/, mesh::Packet* /*pkt*/, uint32_t /*sender_timestamp*/, const uint8_t* /*sender_prefix*/, const char* /*text*/) override {}
   void onContactResponse(const ContactInfo& /*contact*/, const uint8_t* /*data*/, uint8_t /*len*/) override {}
   uint8_t onContactRequest(const ContactInfo& /*contact*/, uint32_t /*sender_timestamp*/, const uint8_t* /*data*/, uint8_t /*len*/, uint8_t* /*reply*/) override { return 0; }
@@ -470,7 +471,7 @@ void setup() {
     halt();
   }
 
-  fast_rng.begin(radio_get_rng_seed());
+  fast_rng.begin(radio_driver.getRngSeed());
 
 #if defined(NRF52_PLATFORM)
   InternalFS.begin();
@@ -483,8 +484,8 @@ void setup() {
   manager.begin(SPIFFS);
 #endif
 
-  radio_set_params(LORA_FREQ, LORA_BW, LORA_SF, LORA_CR);
-  radio_set_tx_power(LORA_TX_POWER);
+  radio_driver.setParams(LORA_FREQ, LORA_BW, LORA_SF, LORA_CR);
+  radio_driver.setTxPower(LORA_TX_POWER);
 
   // optional hello advert
   auto pkt = usb_mesh.createSelfAdvert(manager.prefs().node_name);

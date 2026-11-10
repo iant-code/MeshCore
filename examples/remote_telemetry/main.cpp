@@ -68,7 +68,7 @@ void setup() {
     halt();
   }
 
-  fast_rng.begin(radio_get_rng_seed());
+  fast_rng.begin(radio_driver.getRngSeed());
 
 #if defined(NRF52_PLATFORM) || defined(STM32_PLATFORM)
   InternalFS.begin();
@@ -134,8 +134,8 @@ void setup() {
 
   sensors.begin();
 
-  radio_set_params(LORA_FREQ, LORA_BW, LORA_SF, LORA_CR);
-  radio_set_tx_power(LORA_TX_POWER);
+  radio_driver.setParams(LORA_FREQ, LORA_BW, LORA_SF, LORA_CR);
+  radio_driver.setTxPower(LORA_TX_POWER);
 
   mqttClient.setBufferSize(2048);
 

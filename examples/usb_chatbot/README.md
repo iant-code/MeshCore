@@ -15,7 +15,7 @@ A minimal MeshCore node that bridges a single group chat channel to USB serial u
 3. Flash: `pio run -e Xiao_S3_WIO_usb_chatbot -t upload`
 4. Monitor: `pio device monitor -b 115200`
 
-If `.pio/libdeps` is cleaned, reapply the CayenneLPP ArduinoJson patch as noted in the build logs (switch `add<JsonObject>()` to `createNestedObject()` in CayenneLPP.cpp) and ensure `densaugeo/base64` and `ArduinoJson` stay in `lib_deps`.
+These environments pin `bblanchon/ArduinoJson @ 7.4.2`, which matches the API used by CayenneLPP 1.6.1, so no patching of `.pio/libdeps` is needed. Keep `densaugeo/base64` and `ArduinoJson` in `lib_deps`.
 
 ## Serial JSON Protocol (newline-delimited)
 Send one JSON object per line at 115200 baud.
