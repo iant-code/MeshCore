@@ -18,3 +18,4 @@ examples/remote_telemetry/credentials.cpp
 examples/remote_telemetry/credentials.h
 .venv/
 venv/
+platformio.local.ini

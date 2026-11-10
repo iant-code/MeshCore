@@ -129,8 +129,12 @@ void SerialBLEInterface::begin(const char* prefix, char* name, uint32_t pin_code
   char charpin[20];
   snprintf(charpin, sizeof(charpin), "%lu", (unsigned long)pin_code);
   
-  // If we want to control BLE LED ourselves, uncomment this:
-  // Bluefruit.autoConnLed(false);
+  #ifdef DISABLE_BLE_LED  // use variant platformio.ini build_flags macro: -D DISABLE_BLE_LED
+    Bluefruit.autoConnLed(false);  // false removes the automatic control of the LED by the Bluefruit library
+  #else
+    Bluefruit.autoConnLed(true);  // true leaves the default automatic control of the LED by the Bluefruit library
+  #endif
+  
   Bluefruit.configPrphBandwidth(BANDWIDTH_MAX);
   Bluefruit.begin();
  
@@ -180,6 +184,13 @@ void SerialBLEInterface::begin(const char* prefix, char* name, uint32_t pin_code
   bleuart.setPermission(SECMODE_ENC_WITH_MITM, SECMODE_ENC_WITH_MITM);
   bleuart.begin();
   bleuart.setRxCallback(onBleUartRX);
+
+
+
+  // Register DFU on the main BLE stack so paired clients can discover it
+  // without switching the device into a separate OTA-only BLE mode first.
+  bledfu.setPermission(SECMODE_ENC_WITH_MITM, SECMODE_ENC_WITH_MITM);
+  bledfu.begin();
 
   Bluefruit.Advertising.addFlags(BLE_GAP_ADV_FLAGS_LE_ONLY_GENERAL_DISC_MODE);
   Bluefruit.Advertising.addTxPower();
@@ -246,6 +257,7 @@ void SerialBLEInterface::enable() {
   clearBuffers();
   _last_health_check = millis();
 
+  Bluefruit.Advertising.restartOnDisconnect(true);
   Bluefruit.Advertising.start(0);
 }
 
@@ -259,8 +271,9 @@ void SerialBLEInterface::disable() {
   _isEnabled = false;
   BLE_DEBUG_PRINTLN("SerialBLEInterface: disable");
 
-  disconnect();
+  Bluefruit.Advertising.restartOnDisconnect(false);
   Bluefruit.Advertising.stop();
+  disconnect();
   _last_health_check = 0;
 }
 

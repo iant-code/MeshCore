@@ -9,6 +9,8 @@ PacketQueue::PacketQueue(int max_entries) {
 }
 
 int PacketQueue::countBefore(uint32_t now) const {
+  if (now == 0xFFFFFFFF) return _num;  // sentinel: count all entries regardless of schedule
+
   int n = 0;
   for (int j = 0; j < _num; j++) {
     if ((int32_t)(_schedule_table[j] - now) > 0) continue;   // scheduled for future... ignore for now
@@ -42,7 +44,7 @@ mesh::Packet* PacketQueue::get(uint32_t now) {
 }
 
 mesh::Packet* PacketQueue::removeByIdx(int i) {
-  if (i >= _num) return NULL;  // invalid index
+  if (i < 0 || i >= _num) return NULL;  // invalid index
 
   mesh::Packet* item = _table[i];
   _num--;
@@ -78,10 +80,14 @@ mesh::Packet* StaticPoolPacketManager::allocNew() {
 }
 
 void StaticPoolPacketManager::free(mesh::Packet* packet) {
-  unused.add(packet, 0, 0);
+  if (packet == NULL) return;
+  if (!unused.add(packet, 0, 0)) {
+    MESH_DEBUG_PRINTLN("free: unused queue full, possible double-free detected");
+  }
 }
 
 void StaticPoolPacketManager::queueOutbound(mesh::Packet* packet, uint8_t priority, uint32_t scheduled_for) {
+  if (packet == NULL) return;
   if (!send_queue.add(packet, priority, scheduled_for)) {
     MESH_DEBUG_PRINTLN("queueOutbound: send queue full, dropping packet");
     free(packet);
@@ -97,6 +103,10 @@ int  StaticPoolPacketManager::getOutboundCount(uint32_t now) const {
   return send_queue.countBefore(now);
 }
 
+int  StaticPoolPacketManager::getOutboundTotal() const {
+  return send_queue.count();
+}
+
 int StaticPoolPacketManager::getFreeCount() const {
   return unused.count();
 }
@@ -109,6 +119,7 @@ mesh::Packet* StaticPoolPacketManager::removeOutboundByIdx(int i) {
 }
 
 void StaticPoolPacketManager::queueInbound(mesh::Packet* packet, uint32_t scheduled_for) {
+  if (packet == NULL) return;
   if (!rx_queue.add(packet, 0, scheduled_for)) {
     MESH_DEBUG_PRINTLN("queueInbound: rx queue full, dropping packet");
     free(packet);

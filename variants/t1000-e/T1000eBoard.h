@@ -43,7 +43,7 @@ public:
     uint8_t v = digitalRead(BUTTON_PIN);
     if (v != btn_prev_state) {
       btn_prev_state = v;
-      return (v == LOW) ? 1 : -1;
+      return (v == USER_BTN_PRESSED) ? 1 : -1;
     }
   #endif
     return 0;
@@ -69,10 +69,6 @@ public:
     #ifdef PIN_3V3_ACC_EN
         digitalWrite(PIN_3V3_ACC_EN, LOW);
     #endif
-    #ifdef SENSOR_EN
-        digitalWrite(SENSOR_EN, LOW);
-    #endif
-
     // set led on and wait for button release before poweroff
     #ifdef LED_PIN
     digitalWrite(LED_PIN, HIGH);
@@ -88,6 +84,6 @@ public:
     nrf_gpio_cfg_sense_input(BUTTON_PIN, NRF_GPIO_PIN_NOPULL, NRF_GPIO_PIN_SENSE_HIGH);
     #endif
 
-    sd_power_system_off();
+    NRF52Board::powerOff();
   }
 };

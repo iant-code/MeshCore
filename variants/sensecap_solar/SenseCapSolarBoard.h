@@ -38,7 +38,7 @@ public:
   }
 
   void powerOff() override {
-    digitalWrite(LED_GREEN, LOW);
+    digitalWrite(LED_WHITE, LOW);
     digitalWrite(LED_BLUE, LOW);
 
 #ifdef PIN_USER_BTN
@@ -54,7 +54,7 @@ public:
 #ifdef NRF52_POWER_MANAGEMENT
     initiateShutdown(SHUTDOWN_REASON_USER);
 #else
-    sd_power_system_off();
+    NRF52Board::powerOff();
 #endif
   }
 };
