@@ -13,7 +13,9 @@
   #include <helpers/ui/NullDisplayDriver.h>
   #include <helpers/ui/MomentaryButton.h>
   extern DISPLAY_CLASS display;
-  extern MomentaryButton user_btn;
+  #ifdef PIN_USER_BTN
+    extern MomentaryButton user_btn;
+  #endif
 #endif
 
 extern XiaoNrf52Board board;
