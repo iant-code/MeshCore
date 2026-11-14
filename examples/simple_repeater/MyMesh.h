@@ -127,12 +127,27 @@ class MyMesh : public mesh::Mesh, public CommonCLICallbacks {
   File openAppend(const char* fname);
   bool isLooped(const mesh::Packet* packet, const uint8_t max_counters[]);
 
+  // Experimental hop-id handling: remember recently issued random hops, so DIRECT
+  // replies that retrace a path through this repeater are still recognised.
+  #ifndef ISSUED_HOP_HISTORY
+    #define ISSUED_HOP_HISTORY  64
+  #endif
+  struct IssuedHop { uint8_t sz; uint8_t b[3]; };
+  IssuedHop issued_hops[ISSUED_HOP_HISTORY];
+  uint8_t issued_hop_next;
+  void rememberIssuedHop(const uint8_t* hop, uint8_t sz);
+  bool wasIssuedHop(const uint8_t* hop, uint8_t sz) const;
+  void randomHop(uint8_t* dest, uint8_t sz, const uint8_t* avoid, uint8_t avoid_count);
+  bool handleHopIdCommand(const char* command, char* reply);
+
 protected:
   float getAirtimeBudgetFactor() const override {
     return _prefs.airtime_factor;
   }
 
   bool allowPacketForward(const mesh::Packet* packet) override;
+  void appendSelfToPath(mesh::Packet* packet) override;
+  bool isSelfNextHop(const mesh::Packet* packet) override;
   const char* getLogDateTime() override;
   void logRxRaw(float snr, float rssi, const uint8_t raw[], int len) override;
 

@@ -22,6 +22,13 @@
 #define LOOP_DETECT_MODERATE  2
 #define LOOP_DETECT_STRICT    3
 
+#define HOP_ID_MODE_DEFAULT   0   // append real hash (prefix of public key)
+#define HOP_ID_MODE_FIXED     1   // append hop_id_fixed[] (truncated to packet's hop size)
+#define HOP_ID_MODE_RANDOM    2   // append fresh random bytes (01..FE) per packet
+
+#define HOPSEQ_MODE_DEFAULT   0
+#define HOPSEQ_MODE_RANDOM    1   // replace whole path (incl. this hop) with fresh random bytes per packet
+
 class NodePrefs : public ConfigSerializer {
 public:
   // in-memory backing data
@@ -72,6 +79,10 @@ public:
   uint8_t loop_detect = 0;
   uint8_t cad_enabled = 0;      // hardware Channel Activity Detection before TX (boolean)
   uint8_t extra_sf[4];
+  // Experimental hop-id handling (repeater only; see 'set idbyte' / 'set hopseq')
+  uint8_t hop_id_mode = 0;        // HOP_ID_MODE_*
+  uint8_t hop_id_fixed[3] = {0};  // used when hop_id_mode == HOP_ID_MODE_FIXED, each byte 01..FE
+  uint8_t hopseq_mode = 0;        // HOPSEQ_MODE_*
 
 private:
   class RadioPrefs : public CommonRadioPrefs {
@@ -186,6 +197,9 @@ private:
       def("f_max_uns", _parent->flood_max_unscoped);
       def("f_max_adv", _parent->flood_max_advert);
       def("loop", _parent->loop_detect);
+      def("hop_id", _parent->hop_id_mode);
+      def("hop_id_val", _parent->hop_id_fixed, sizeof(_parent->hop_id_fixed));
+      def("hopseq", _parent->hopseq_mode);
     }
   public:
     RepeatPrefs(NodePrefs* parent) : _parent(parent) { }

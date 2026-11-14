@@ -86,7 +86,7 @@ DispatcherAction Mesh::onRecvPacket(Packet* pkt) {
       }
     }
 
-    if (self_id.isHashMatch(pkt->path, pkt->getPathHashSize()) && allowPacketForward(pkt)) {
+    if (isSelfNextHop(pkt) && allowPacketForward(pkt)) {
       uint32_t d = getDirectRetransmitDelay(pkt);
       if (pkt->getPayloadType() == PAYLOAD_TYPE_MULTIPART) {
         return forwardMultipartDirect(pkt, d);
@@ -341,13 +341,22 @@ void Mesh::removeSelfFromPath(Packet* pkt) {
   }
 }
 
+void Mesh::appendSelfToPath(Packet* packet) {
+  uint8_t n = packet->getPathHashCount();
+  uint8_t sz = packet->getPathHashSize();
+  self_id.copyHashTo(&packet->path[n * sz], sz);
+  packet->setPathHashCount(n + 1);
+}
+
+bool Mesh::isSelfNextHop(const Packet* packet) {
+  return self_id.isHashMatch(packet->path, packet->getPathHashSize());
+}
+
 DispatcherAction Mesh::routeRecvPacket(Packet* packet) {
   uint8_t n = packet->getPathHashCount();
   if (packet->isRouteFlood() && !packet->isMarkedDoNotRetransmit()
     && (n + 1)*packet->getPathHashSize() <= MAX_PATH_SIZE && allowPacketForward(packet)) {
-    // append this node's hash to 'path'
-    self_id.copyHashTo(&packet->path[n * packet->getPathHashSize()], packet->getPathHashSize());
-    packet->setPathHashCount(n + 1);
+    appendSelfToPath(packet);
 
     uint32_t d = getRetransmitDelay(packet);
     // as this propagates outwards, give it lower and lower priority

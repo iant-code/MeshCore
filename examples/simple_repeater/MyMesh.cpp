@@ -410,6 +410,144 @@ bool MyMesh::isLooped(const mesh::Packet* packet, const uint8_t max_counters[]) 
   return n >= max_counters[hash_size];
 }
 
+// ---------------- Experimental hop-id handling ----------------
+
+// a 1-byte hop has only 254 possible values, so only trust the most recent few (limits false matches)
+#define ISSUED_HOP_MATCH_1BYTE  8
+
+void MyMesh::rememberIssuedHop(const uint8_t* hop, uint8_t sz) {
+  IssuedHop& e = issued_hops[issued_hop_next];
+  e.sz = sz;
+  memcpy(e.b, hop, sz);
+  issued_hop_next = (issued_hop_next + 1) % ISSUED_HOP_HISTORY;
+}
+
+bool MyMesh::wasIssuedHop(const uint8_t* hop, uint8_t sz) const {
+  uint8_t seen = 0;
+  for (int k = 0; k < ISSUED_HOP_HISTORY; k++) {  // newest first
+    const IssuedHop& e = issued_hops[(issued_hop_next + ISSUED_HOP_HISTORY - 1 - k) % ISSUED_HOP_HISTORY];
+    if (e.sz != sz) continue;
+    if (sz == 1 && ++seen > ISSUED_HOP_MATCH_1BYTE) break;
+    if (memcmp(e.b, hop, sz) == 0) return true;
+  }
+  return false;
+}
+
+// fill dest[0..sz) with random bytes in 01..FE, trying to differ from each of the 'avoid' hops
+void MyMesh::randomHop(uint8_t* dest, uint8_t sz, const uint8_t* avoid, uint8_t avoid_count) {
+  for (int attempt = 0; attempt < 16; attempt++) {
+    for (int i = 0; i < sz; i++) dest[i] = (uint8_t) getRNG()->nextInt(0x01, 0xFF);
+    bool clash = false;
+    for (int j = 0; j < avoid_count && !clash; j++) {
+      clash = memcmp(dest, &avoid[j * sz], sz) == 0;
+    }
+    if (!clash) return;
+  }
+}
+
+void MyMesh::appendSelfToPath(mesh::Packet* packet) {
+  uint8_t n = packet->getPathHashCount();
+  uint8_t sz = packet->getPathHashSize();
+  if (sz > 3 || (_prefs.hop_id_mode == HOP_ID_MODE_DEFAULT && _prefs.hopseq_mode == HOPSEQ_MODE_DEFAULT)) {
+    mesh::Mesh::appendSelfToPath(packet);  // normal behaviour
+    return;
+  }
+
+  uint8_t* hop = &packet->path[n * sz];
+  if (_prefs.hopseq_mode == HOPSEQ_MODE_RANDOM) {
+    // replace every existing hop, plus this one, with fresh random values (all distinct)
+    for (int i = 0; i <= n; i++) {
+      randomHop(&packet->path[i * sz], sz, packet->path, i);
+    }
+    rememberIssuedHop(hop, sz);
+  } else if (_prefs.hop_id_mode == HOP_ID_MODE_FIXED) {
+    memcpy(hop, _prefs.hop_id_fixed, sz);  // eg. FA0D34 -> FA, FA0D or FA0D34
+  } else {  // HOP_ID_MODE_RANDOM
+    randomHop(hop, sz, packet->path, n);   // differ from hops already in path
+    rememberIssuedHop(hop, sz);
+  }
+  packet->setPathHashCount(n + 1);
+}
+
+bool MyMesh::isSelfNextHop(const mesh::Packet* packet) {
+  uint8_t sz = packet->getPathHashSize();
+  if (self_id.isHashMatch(packet->path, sz)) return true;   // real ID always accepted
+  if (sz > 3) return false;
+  if (_prefs.hop_id_mode == HOP_ID_MODE_FIXED && memcmp(packet->path, _prefs.hop_id_fixed, sz) == 0) return true;
+  return wasIssuedHop(packet->path, sz);
+}
+
+static int hexNibble(char c) {
+  if (c >= '0' && c <= '9') return c - '0';
+  if (c >= 'a' && c <= 'f') return c - 'a' + 10;
+  if (c >= 'A' && c <= 'F') return c - 'A' + 10;
+  return -1;
+}
+
+// handles: set idbyte {default|random|XXXXXX}, set hopseq {default|random}, get idbyte, get hopseq
+bool MyMesh::handleHopIdCommand(const char* command, char* reply) {
+  char arg[16];
+  if (memcmp(command, "set idbyte ", 11) == 0) {
+    StrHelper::strncpy(arg, &command[11], sizeof(arg));
+    for (int i = strlen(arg); i > 0 && arg[i - 1] == ' '; i--) arg[i - 1] = 0;  // trim trailing spaces
+
+    if (strcmp(arg, "default") == 0) {
+      _prefs.hop_id_mode = HOP_ID_MODE_DEFAULT;
+    } else if (strcmp(arg, "random") == 0) {
+      _prefs.hop_id_mode = HOP_ID_MODE_RANDOM;
+    } else {
+      uint8_t val[3];
+      bool ok = strlen(arg) == 6;
+      for (int i = 0; ok && i < 3; i++) {
+        int hi = hexNibble(arg[i * 2]), lo = hexNibble(arg[i * 2 + 1]);
+        ok = hi >= 0 && lo >= 0;
+        if (ok) {
+          val[i] = (uint8_t)((hi << 4) | lo);
+          ok = val[i] != 0x00 && val[i] != 0xFF;
+        }
+      }
+      if (!ok) {
+        strcpy(reply, "Err - must be: default, random, or 3 hex bytes 01..FE (eg. FA0D34)");
+        return true;
+      }
+      memcpy(_prefs.hop_id_fixed, val, 3);
+      _prefs.hop_id_mode = HOP_ID_MODE_FIXED;
+    }
+    savePrefs();
+    strcpy(reply, "OK");
+    return true;
+  }
+  if (memcmp(command, "set hopseq ", 11) == 0) {
+    StrHelper::strncpy(arg, &command[11], sizeof(arg));
+    for (int i = strlen(arg); i > 0 && arg[i - 1] == ' '; i--) arg[i - 1] = 0;
+
+    if (strcmp(arg, "default") == 0) {
+      _prefs.hopseq_mode = HOPSEQ_MODE_DEFAULT;
+    } else if (strcmp(arg, "random") == 0) {
+      _prefs.hopseq_mode = HOPSEQ_MODE_RANDOM;
+    } else {
+      strcpy(reply, "Err - must be: default or random");
+      return true;
+    }
+    savePrefs();
+    strcpy(reply, "OK");
+    return true;
+  }
+  if (memcmp(command, "get idbyte", 10) == 0) {
+    if (_prefs.hop_id_mode == HOP_ID_MODE_FIXED) {
+      sprintf(reply, "> %02X%02X%02X", _prefs.hop_id_fixed[0], _prefs.hop_id_fixed[1], _prefs.hop_id_fixed[2]);
+    } else {
+      strcpy(reply, _prefs.hop_id_mode == HOP_ID_MODE_RANDOM ? "> random" : "> default");
+    }
+    return true;
+  }
+  if (memcmp(command, "get hopseq", 10) == 0) {
+    strcpy(reply, _prefs.hopseq_mode == HOPSEQ_MODE_RANDOM ? "> random" : "> default");
+    return true;
+  }
+  return false;
+}
+
 void MyMesh::sendFloodReply(mesh::Packet* packet, unsigned long delay_millis, uint8_t path_hash_size) {
   TransportKey req_scope;
   bool is_wildcard = recv_pkt_region != NULL && recv_pkt_region->isWildcard();
@@ -939,6 +1077,12 @@ MyMesh::MyMesh(mesh::MainBoard &board, mesh::Radio &radio, mesh::MillisecondCloc
   pending_discover_tag = 0;
   pending_discover_until = 0;
 
+  _prefs.hop_id_mode = HOP_ID_MODE_DEFAULT;
+  memset(_prefs.hop_id_fixed, 0, sizeof(_prefs.hop_id_fixed));
+  _prefs.hopseq_mode = HOPSEQ_MODE_DEFAULT;
+  memset(issued_hops, 0, sizeof(issued_hops));
+  issued_hop_next = 0;
+
   memset(default_scope.key, 0, sizeof(default_scope.key));
 }
 
@@ -947,6 +1091,14 @@ void MyMesh::begin(FILESYSTEM *fs) {
   _fs = fs;
   // load persisted prefs
   _cli.loadPrefs(_fs);
+  // sanitise experimental hop-id prefs (fall back to default behaviour if anything is off)
+  if (_prefs.hop_id_mode > HOP_ID_MODE_RANDOM) _prefs.hop_id_mode = HOP_ID_MODE_DEFAULT;
+  if (_prefs.hop_id_mode == HOP_ID_MODE_FIXED) {
+    for (int i = 0; i < 3; i++) {
+      if (_prefs.hop_id_fixed[i] == 0x00 || _prefs.hop_id_fixed[i] == 0xFF) { _prefs.hop_id_mode = HOP_ID_MODE_DEFAULT; break; }
+    }
+  }
+  if (_prefs.hopseq_mode > HOPSEQ_MODE_RANDOM) _prefs.hopseq_mode = HOPSEQ_MODE_DEFAULT;
   acl.load(_fs, self_id);
   // TODO: key_store.begin();
   region_map.load(_fs);
@@ -1238,8 +1390,9 @@ void MyMesh::handleCommand(uint32_t sender_timestamp, char *command, char *reply
     command += 3;
   }
 
-  // handle ACL related commands
-  if (memcmp(command, "setperm ", 8) == 0) {   // format:  setperm {pubkey-hex} {permissions-int8}
+  if (handleHopIdCommand(command, reply)) {
+    // experimental hop-id commands (idbyte / hopseq)
+  } else if (memcmp(command, "setperm ", 8) == 0) {   // handle ACL related commands   // format:  setperm {pubkey-hex} {permissions-int8}
     char* hex = &command[8];
     char* sp = strchr(hex, ' ');   // look for separator char
     if (sp == NULL) {

@@ -45,6 +45,19 @@ protected:
   DispatcherAction routeRecvPacket(Packet* packet);
 
   /**
+   * \brief  Appends this node's hop entry to a FLOOD packet's path, before it is re-transmitted.
+   *         Caller has already checked there is room for one more entry.
+   *         Default: append this node's real hash (prefix of public key).
+   */
+  virtual void appendSelfToPath(Packet* packet);
+
+  /**
+   * \brief  Is this node the next hop of a DIRECT routed packet? (ie. does path[0] identify this node)
+   *         Default: path[0] matches this node's real hash.
+   */
+  virtual bool isSelfNextHop(const Packet* packet);
+
+  /**
    * \brief    Called _before_ the packet is dispatched to the on..Recv() methods.
    * \returns  true, if given packet should NOT be processed.
    */
